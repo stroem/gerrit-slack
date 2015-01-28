@@ -37,8 +37,10 @@ class GerritNotifier
   def self.start_buffer_daemon
     # post every X seconds rather than truly in real-time to group messages
     # to conserve slack-log
-    Thread.new do
-      slack_config = YAML.load(File.read('config/slack.yml'))['slack']
+    slack_config = YAML.load(File.read('config/slack.yml'))['slack']
+    notifier = Slack::Notifier.new slack_config['webhook']
+	
+	Thread.new do
 
       while true
         @@semaphore.synchronize do
@@ -51,12 +53,8 @@ class GerritNotifier
 
           if @@buffer.size > 0 && !ENV['DEVELOPMENT']
             @@buffer.each do |channel, messages|
-              notifier = Slack::Notifier.new slack_config['team'], slack_config['token']
               notifier.ping(messages.join("\n\n"),
-                channel: channel,
-                username: 'gerrit',
-                icon_emoji: ':dragon_face:',
-                link_names: 1
+                channel: channel
               )
             end
           end
@@ -96,45 +94,55 @@ class GerritNotifier
     # Jenkins update
     if update.jenkins?
       if update.build_successful? && !update.wip?
-        notify channels, "#{update.commit} *passed* Jenkins and is ready for *code review*"
+        notify channels, "*[#{update.project}]* #{update.commit} *passed* Jenkins and is ready for *code review*"
       elsif update.build_failed? && !update.build_aborted?
-        notify_user update.owner, "#{update.commit_without_owner} *failed* on Jenkins"
+        notify_user update.owner, "*[#{update.project}]* #{update.commit_without_owner} *failed* on Jenkins"
       end
     end
 
     # Code review +2
     if update.code_review_approved?
-      notify channels, "#{update.author_slack_name} has *+2'd* #{update.commit}: ready for *QA*"
+      notify channels, "*[#{update.project}]* #{update.author} has *+2'd* #{update.commit}: ready for *QA*"
     end
 
     # Code review +1
     if update.code_review_tentatively_approved?
-      notify channels, "#{update.author_slack_name} has *+1'd* #{update.commit}: needs another set of eyes for *code review*"
+      notify channels, "*[#{update.project}]* #{update.author} has *+1'd* #{update.commit}: needs another set of eyes for *code review*"
     end
 
     # QA/Product
     if update.qa_approved? && update.product_approved?
-      notify channels, "#{update.author_slack_name} has *QA/Product-approved* #{update.commit}!", ":mj: :victory:"
+      notify channels, "*[#{update.project}]* #{update.author} has *QA/Product-approved* #{update.commit}!"
     elsif update.qa_approved?
-      notify channels, "#{update.author_slack_name} has *QA-approved* #{update.commit}!", ":mj:"
+      notify channels, "*[#{update.project}]* #{update.author} has *QA-approved* #{update.commit}!"
     elsif update.product_approved?
-      notify channels, "#{update.author_slack_name} has *Product-approved* #{update.commit}!", ":victory:"
+      notify channels, "*[#{update.project}]* #{update.author} has *Product-approved* #{update.commit}!"
     end
 
     # Any minuses (Code/Product/QA)
     if update.minus_1ed? || update.minus_2ed?
       verb = update.minus_1ed? ? "-1'd" : "-2'd"
-      notify channels, "#{update.author_slack_name} has *#{verb}* #{update.commit}"
+      notify channels, "*[#{update.project}]* #{update.author} has *#{verb}* #{update.commit}"
     end
 
     # New comment added
     if update.comment_added? && update.human? && update.comment != ''
-      notify channels, "#{update.author_slack_name} has left comments on #{update.commit}: \"#{update.comment}\""
+      notify channels, "*[#{update.project}]* #{update.author} has left comments on #{update.commit}: \"#{update.comment}\""
     end
-
+    
+    # Change
+    if update.new_commit?
+      notify channels, "*[#{update.project}]* #{update.author} has *pushed* #{update.commit}"
+    end
+    
+	# New commit
+    if update.new_update?
+      notify channels, "*[#{update.project}]* #{update.author} has *updated* #{update.commit}: Patch Set #{update.patchset}"
+    end
+      
     # Merged
     if update.merged?
-      notify channels, "#{update.commit} was merged! \\o/", ":yuss: :dancing_cool:"
+      notify channels, "#{update.commit} was merged!"
     end
   end
 end

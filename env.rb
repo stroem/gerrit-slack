@@ -5,6 +5,7 @@ Bundler.require
 
 require 'yaml'
 require 'json'
+require 'slack-notifier'
 
 require_relative 'lib/alias'
 require_relative 'lib/update'

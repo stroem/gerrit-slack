@@ -16,6 +16,14 @@ class Update
     json['change']['project'] if json['change']
   end
 
+  def new_commit?
+    type == 'patchset-created' && json['patchSet']['number'] == "1"
+  end
+
+  def new_update?
+    type == 'patchset-created' && json['patchSet']['number'] != "1"
+  end
+
   def comment_added?
     type == 'comment-added'
   end
@@ -54,19 +62,23 @@ class Update
     frd_lines.join("\n\n")
   end
 
+  def patchset
+    json['patchSet']['number'] if json['patchSet']
+  end
+
   def commit
-    "#{commit_without_owner} (by @#{slack_name_for owner})"
+    "#{commit_without_owner} (by #{owner})"
   end
 
   def commit_without_owner
-    "<#{json['change']['url']}|[#{json['change']['project']}] #{sanitized_subject}>"
+    "<#{json['change']['url']}| #{sanitized_subject}>"
   end
 
   def owner
     if json['change']
-      json['change']['owner']['username']
+      json['change']['owner']['name']
     elsif json['submitter']
-      json['submitter']['username']
+      json['submitter']['name']
     end
   end
 
@@ -87,7 +99,11 @@ class Update
   end
 
   def author
-    json['author']['username']
+    if json['author']
+      json['author']['name']
+    elsif json['patchSet']
+      json['patchSet']['author']['name']
+    end
   end
 
   def author_slack_name
